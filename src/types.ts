@@ -1,0 +1,16 @@
+export interface GO {
+  id: string;          // unique slug: e.g. "finance-dept-2024-ms42"
+  department: string;
+  year: string;
+  title: string;
+  description: string;
+  pdfUrl: string;
+  aiOverview: string;  // 2-3 sentence summary generated from PDF text
+  scrapedAt: string;   // ISO 8601 timestamp
+}
+
+export interface ScrapeResult {
+  added: GO[];
+  skipped: number;
+  errors: string[];
+}

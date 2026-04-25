@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm run build",
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/process-go.ts": {
+      "maxDuration": 30,
+      "memory": 512
+    }
+  },
+  "routes": [
+    { "src": "/api/process-go", "dest": "/api/process-go.ts" },
+    { "src": "/api/(.*)", "dest": "/api/index.ts" }
+  ],
+  "queues": {
+    "consumers": [
+      {
+        "topic": "go-processing",
+        "path": "/api/process-go"
+      }
+    ]
+  }
+}
