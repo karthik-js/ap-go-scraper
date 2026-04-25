@@ -67,16 +67,11 @@ export async function setGO(go: GO): Promise<void> {
 }
 
 export async function getAllGOIds(): Promise<string[]> {
-  const ids = await getRedis().get<string[]>(INDEX_KEY);
-  return ids ?? [];
+  return getRedis().smembers(INDEX_KEY);
 }
 
 export async function addGOToIndex(id: string): Promise<void> {
-  const ids = await getAllGOIds();
-  if (!ids.includes(id)) {
-    ids.push(id);
-    await getRedis().set(INDEX_KEY, ids);
-  }
+  await getRedis().sadd(INDEX_KEY, id);
 }
 
 export async function flushAllGOs(): Promise<number> {
