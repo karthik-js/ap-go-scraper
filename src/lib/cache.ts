@@ -117,6 +117,32 @@ export async function checkScrapeRateLimit(): Promise<{
   };
 }
 
+const CHAT_RATE_LIMIT_MAX = 20;
+const CHAT_RATE_LIMIT_WINDOW_SEC = 60 * 60; // 1 hour
+
+export async function checkChatRateLimit(ip: string): Promise<{
+  allowed: boolean;
+  remaining: number;
+  resetInSeconds: number;
+}> {
+  const redis = getRedis();
+  const key = `chat:rate-limit:${ip}`;
+  const count = await redis.incr(key);
+
+  if (count === 1) {
+    await redis.expire(key, CHAT_RATE_LIMIT_WINDOW_SEC);
+  }
+
+  const ttl = await redis.ttl(key);
+  const remaining = Math.max(0, CHAT_RATE_LIMIT_MAX - count);
+
+  return {
+    allowed: count <= CHAT_RATE_LIMIT_MAX,
+    remaining,
+    resetInSeconds: ttl > 0 ? ttl : CHAT_RATE_LIMIT_WINDOW_SEC,
+  };
+}
+
 export async function getAllGOs(): Promise<GO[]> {
   const ids = await getAllGOIds();
   if (ids.length === 0) return [];

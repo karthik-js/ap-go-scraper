@@ -5,6 +5,7 @@ export interface GO {
   description: string;
   pdfUrl: string;
   aiOverview: string;  // 2-3 sentence summary generated from PDF text
+  pdfText?: string;    // cached extracted PDF text for chat (set on first question)
   status: "pending" | "done" | "failed";
   scrapedAt: string;   // ISO 8601 timestamp
 }
