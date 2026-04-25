@@ -1,8 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "version": 2,
+  "framework": null,
   "installCommand": "pnpm install",
   "buildCommand": "pnpm run build",
+  "outputDirectory": ".",
   "functions": {
     "api/index.ts": {
       "maxDuration": 60,
@@ -16,8 +17,8 @@
       ]
     }
   },
-  "routes": [
-    { "src": "/api/process-go", "dest": "/api/process-go.ts" },
-    { "src": "/api/(.*)", "dest": "/api/index.ts" }
+  "rewrites": [
+    { "source": "/api/process-go", "destination": "/api/process-go" },
+    { "source": "/api/(.*)", "destination": "/api/index" }
   ]
 }
