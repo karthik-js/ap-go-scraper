@@ -13,6 +13,8 @@ gosRouter.get("/", async (c) => {
     gos = gos.filter((go) => go.year === yearFilter);
   }
 
+  gos.sort((a, b) => Number(b.year) - Number(a.year));
+
   return c.json({ total: gos.length, gos });
 });
 
