@@ -50,12 +50,41 @@ export async function scrapeGOList(): Promise<RawGO[]> {
 
   try {
     console.log(`[scraper] Navigating to: ${GO_LIST_URL}`);
-    await page.goto(GO_LIST_URL, { waitUntil: "networkidle", timeout: 30000 });
+    await page.goto(GO_LIST_URL, { waitUntil: "domcontentloaded", timeout: 30000 });
 
-    await page.waitForSelector("table, .go-list, .views-table, .view-content", {
-      timeout: 15000,
+    // Give JS-rendered content time to hydrate
+    await page.waitForTimeout(5000);
+
+    // Log page title + URL to confirm we landed correctly
+    const title = await page.title();
+    const url = page.url();
+    console.log(`[scraper] Page title: "${title}" | URL: ${url}`);
+
+    // Log all unique tag names and classes to understand DOM structure
+    const domSummary = await page.evaluate(() => {
+      const allLinks = Array.from(document.querySelectorAll("a[href]"))
+        .map((a) => (a as HTMLAnchorElement).href)
+        .filter((h) => h.includes(".pdf") || h.includes("upload"))
+        .slice(0, 5);
+
+      const bodySnippet = document.body.innerText.slice(0, 500).replace(/\s+/g, " ");
+
+      const classNames = Array.from(
+        new Set(
+          Array.from(document.querySelectorAll("[class]"))
+            .map((el) => el.className)
+            .filter(Boolean)
+            .flatMap((c) => c.split(" "))
+            .filter((c) => c.length > 3)
+        )
+      ).slice(0, 30);
+
+      return { allLinks, bodySnippet, classNames };
     });
-    console.log("[scraper] Page loaded, extracting GOs...");
+
+    console.log("[scraper] PDF links found:", domSummary.allLinks);
+    console.log("[scraper] CSS classes:", domSummary.classNames.join(", "));
+    console.log("[scraper] Body text:", domSummary.bodySnippet);
 
     const gos: RawGO[] = [];
     let hasNextPage = true;
@@ -79,7 +108,7 @@ export async function scrapeGOList(): Promise<RawGO[]> {
             const cells = row.querySelectorAll("td");
             if (cells.length < 2) return;
 
-            const linkEl = row.querySelector("a[href$='.pdf'], a[href*='/uploads/']");
+            const linkEl = row.querySelector("a[href$='.pdf'], a[href*='/uploads/'], a[href*='upload']");
             const pdfUrl = linkEl ? (linkEl as HTMLAnchorElement).href : "";
             if (!pdfUrl) return;
 
@@ -93,24 +122,25 @@ export async function scrapeGOList(): Promise<RawGO[]> {
           });
         }
 
-        // Fallback: generic view-row items with PDF links
+        // Fallback: any element containing a PDF link
         if (rows.length === 0) {
-          const items = document.querySelectorAll(".views-row, .view-row, .go-item");
-          items.forEach((item) => {
-            const linkEl = item.querySelector("a[href$='.pdf'], a[href*='/uploads/']");
-            const pdfUrl = linkEl ? (linkEl as HTMLAnchorElement).href : "";
-            if (!pdfUrl) return;
+          const allPdfLinks = Array.from(
+            document.querySelectorAll("a[href$='.pdf'], a[href*='upload']")
+          ) as HTMLAnchorElement[];
 
-            const texts = Array.from(item.querySelectorAll("span, td, div, p"))
+          allPdfLinks.forEach((linkEl) => {
+            const container = linkEl.closest("tr, li, .views-row, .view-row, article, .item, [class*='row']") ?? linkEl.parentElement;
+            if (!container) return;
+            const texts = Array.from(container.querySelectorAll("td, span, p, div"))
               .map((el) => el.textContent?.trim())
-              .filter(Boolean);
+              .filter((t): t is string => Boolean(t) && t.length > 1);
 
             rows.push({
               department: texts[0] ?? "",
               year: texts[1] ?? "",
-              title: texts[2] ?? linkEl?.textContent?.trim() ?? "",
+              title: texts[2] ?? linkEl.textContent?.trim() ?? "",
               description: texts[3] ?? "",
-              pdfUrl,
+              pdfUrl: linkEl.href,
             });
           });
         }
