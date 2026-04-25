@@ -10,11 +10,18 @@ import type { GO } from "../types.js";
 // Vercel invokes this route directly — it has no public URL.
 export const POST = handleCallback<ProcessGOMessage>(async (data, metadata) => {
   const { jobId, raw, goId } = data;
+  console.log(`[process-go] Starting: ${goId} (delivery #${metadata.deliveryCount})`);
 
   try {
     const partial = rawGOToPartial(raw);
+
+    console.log(`[process-go] Fetching PDF: ${raw.pdfUrl}`);
     const pdfText = await extractPDFText(raw.pdfUrl);
+    console.log(`[process-go] PDF extracted, ${pdfText.length} chars`);
+
+    console.log(`[process-go] Generating AI overview for: ${goId}`);
     const aiOverview = await generateGOOverview(pdfText);
+    console.log(`[process-go] AI overview done for: ${goId}`);
 
     const go: GO = {
       ...partial,
@@ -26,10 +33,10 @@ export const POST = handleCallback<ProcessGOMessage>(async (data, metadata) => {
     await addGOToIndex(go.id);
     await incrementJobDone(jobId);
 
-    console.log(`[process-go] Done: ${goId} (delivery #${metadata.deliveryCount})`);
+    console.log(`[process-go] ✓ Cached: ${goId}`);
   } catch (err) {
+    console.error(`[process-go] ✗ Failed: ${goId}`, err);
     await incrementJobFailed(jobId, `${goId}: ${String(err)}`);
-    // Re-throw so Vercel Queue retries the message
     throw err;
   }
 });

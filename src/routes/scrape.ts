@@ -15,12 +15,16 @@ export interface ProcessGOMessage {
 
 // POST /api/scrape — scrapes GO list, queues each new GO for enrichment
 scrapeRouter.post("/", async (c) => {
+  console.log("[scrape] Starting GO list scrape...");
   let rawGOs: RawGO[];
   try {
     rawGOs = await scrapeGOList();
   } catch (err) {
+    console.error("[scrape] Scraping failed:", err);
     return c.json({ error: "Scraping failed", detail: String(err) }, 500);
   }
+
+  console.log(`[scrape] Found ${rawGOs.length} GOs on the page`);
 
   if (rawGOs.length === 0) {
     return c.json({ message: "No GOs found on the page" }, 200);
@@ -34,18 +38,21 @@ scrapeRouter.post("/", async (c) => {
     const partial = rawGOToPartial(raw);
     const existing = await getGO(partial.id);
     if (existing) {
+      console.log(`[scrape] Skipping cached GO: ${partial.id}`);
       skipped++;
       continue;
     }
 
     const message: ProcessGOMessage = { jobId, raw, goId: partial.id };
     await send("go-processing", message, {
-      idempotencyKey: partial.id, // prevent duplicate processing on retries
+      idempotencyKey: partial.id,
     });
+    console.log(`[scrape] Queued GO: ${partial.id}`);
     queued++;
   }
 
-  // Store initial job status in Redis for polling
+  console.log(`[scrape] Job ${jobId} — queued: ${queued}, skipped: ${skipped}`);
+
   await setJobStatus({
     jobId,
     total: queued,
@@ -67,6 +74,7 @@ scrapeRouter.post("/", async (c) => {
 // GET /api/scrape/status/:jobId — poll job progress
 scrapeRouter.get("/status/:jobId", async (c) => {
   const jobId = c.req.param("jobId");
+  console.log(`[scrape] Status check for job: ${jobId}`);
   const status = await getJobStatus(jobId);
   if (!status) {
     return c.json({ error: "Job not found" }, 404);

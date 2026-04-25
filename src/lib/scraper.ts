@@ -44,21 +44,25 @@ export interface RawGO {
 }
 
 export async function scrapeGOList(): Promise<RawGO[]> {
+  console.log("[scraper] Launching browser...");
   const browser = await getBrowser();
   const page = await browser.newPage();
 
   try {
+    console.log(`[scraper] Navigating to: ${GO_LIST_URL}`);
     await page.goto(GO_LIST_URL, { waitUntil: "networkidle", timeout: 30000 });
 
-    // Wait for the GO list table/content to appear
     await page.waitForSelector("table, .go-list, .views-table, .view-content", {
       timeout: 15000,
     });
+    console.log("[scraper] Page loaded, extracting GOs...");
 
     const gos: RawGO[] = [];
     let hasNextPage = true;
+    let pageNum = 1;
 
     while (hasNextPage) {
+      console.log(`[scraper] Scraping page ${pageNum}...`);
       const pageGOs = await page.evaluate(() => {
         const rows: Array<{
           department: string;
@@ -115,10 +119,11 @@ export async function scrapeGOList(): Promise<RawGO[]> {
       });
 
       gos.push(...pageGOs);
+      console.log(`[scraper] Page ${pageNum}: found ${pageGOs.length} GOs (total: ${gos.length})`);
 
-      // Check for next page pagination link
       const nextLink = await page.$("a.next, a[title='Go to next page'], li.next a, .pager-next a");
       if (nextLink) {
+        pageNum++;
         await nextLink.click();
         await page.waitForLoadState("networkidle");
       } else {
@@ -126,9 +131,11 @@ export async function scrapeGOList(): Promise<RawGO[]> {
       }
     }
 
+    console.log(`[scraper] Done. Total GOs scraped: ${gos.length}`);
     return gos;
   } finally {
     await browser.close();
+    console.log("[scraper] Browser closed");
   }
 }
 
