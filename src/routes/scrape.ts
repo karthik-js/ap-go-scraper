@@ -108,7 +108,6 @@ scrapeRouter.post("/", async (c) => {
     await send("go-processing", message, {
       idempotencyKey: partial.id,
     });
-    console.log(`[scrape] Queued GO: ${partial.id}`);
     queued++;
   }
 
