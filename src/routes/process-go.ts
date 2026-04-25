@@ -6,11 +6,13 @@ import { rawGOToPartial } from "../lib/scraper.js";
 import type { ProcessGOMessage } from "./scrape.js";
 import type { GO } from "../types.js";
 
+const MAX_DELIVERY_ATTEMPTS = 3;
+
 // Vercel Queue push-mode consumer for the "go-processing" topic.
 // Vercel invokes this route directly — it has no public URL.
 export const POST = handleCallback<ProcessGOMessage>(async (data, metadata) => {
   const { jobId, raw, goId } = data;
-  console.log(`[process-go] Starting: ${goId} (delivery #${metadata.deliveryCount})`);
+  console.log(`[process-go] Starting: ${goId} (delivery #${metadata.deliveryCount}/${MAX_DELIVERY_ATTEMPTS})`);
 
   try {
     const partial = rawGOToPartial(raw);
@@ -37,6 +39,13 @@ export const POST = handleCallback<ProcessGOMessage>(async (data, metadata) => {
   } catch (err) {
     console.error(`[process-go] ✗ Failed: ${goId}`, err);
     await incrementJobFailed(jobId, `${goId}: ${String(err)}`);
-    throw err;
+
+    if (metadata.deliveryCount < MAX_DELIVERY_ATTEMPTS) {
+      console.log(`[process-go] Retrying ${goId} (attempt ${metadata.deliveryCount}/${MAX_DELIVERY_ATTEMPTS})`);
+      throw err; // re-throw to trigger Vercel Queue retry
+    }
+
+    // Max attempts reached — log and drop the message (don't re-throw)
+    console.error(`[process-go] Dropping ${goId} after ${MAX_DELIVERY_ATTEMPTS} failed attempts`);
   }
 });
