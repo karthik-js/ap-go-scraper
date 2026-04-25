@@ -27,8 +27,18 @@ export const POST = handleCallback<ProcessGOMessage>(
     console.log(`[process-go] PDF extracted, ${pdfText.length} chars`);
 
     console.log(`[process-go] Generating AI overview for: ${goId}`);
-    const aiOverview = await generateGOOverview(pdfText);
-    console.log(`[process-go] AI overview done for: ${goId}`);
+    let aiOverview = "";
+    try {
+      aiOverview = await generateGOOverview(pdfText);
+      console.log(`[process-go] AI overview done for: ${goId}`);
+    } catch (aiErr) {
+      const msg = String(aiErr);
+      if (msg.includes("spending cap") || msg.includes("quota") || msg.includes("429")) {
+        console.warn(`[process-go] AI quota exceeded, saving GO without overview: ${goId}`);
+      } else {
+        throw aiErr; // Let non-quota errors bubble up for retry
+      }
+    }
 
     const go: GO = {
       ...partial,
