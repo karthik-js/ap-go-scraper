@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { serve } from "@hono/node-server";
+import { handle } from "@hono/node-server/vercel";
 import scrapeRouter from "../src/routes/scrape.js";
 import gosRouter from "../src/routes/gos.js";
 
@@ -29,7 +30,5 @@ if (!process.env.VERCEL) {
   });
 }
 
-// Vercel handler
-export default app;
-export const GET = app.fetch;
-export const POST = app.fetch;
+// Vercel serverless handler
+export default handle(app);
