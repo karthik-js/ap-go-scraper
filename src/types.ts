@@ -5,6 +5,7 @@ export interface GO {
   description: string;
   pdfUrl: string;
   aiOverview: string;  // 2-3 sentence summary generated from PDF text
+  status: "pending" | "done" | "failed";
   scrapedAt: string;   // ISO 8601 timestamp
 }
 

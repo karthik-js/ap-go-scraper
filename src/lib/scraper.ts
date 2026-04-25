@@ -92,7 +92,7 @@ export async function scrapeGOList(): Promise<RawGO[]> {
   }
 }
 
-export function rawGOToPartial(raw: RawGO): Omit<GO, "aiOverview" | "scrapedAt"> {
+export function rawGOToPartial(raw: RawGO): Omit<GO, "aiOverview" | "scrapedAt" | "status"> {
   const id = buildGOId(raw.year, raw.title);
   return { id, ...raw };
 }

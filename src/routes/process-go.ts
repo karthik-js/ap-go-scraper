@@ -1,30 +1,22 @@
-import {
-  handleCallback,
-  MessageNotFoundError,
-  MessageNotAvailableError,
-} from "@vercel/queue";
+import { handleCallback, MessageNotFoundError, MessageNotAvailableError } from "@vercel/queue";
 import { extractPDFText } from "../lib/pdf.js";
 import { generateGOOverview } from "../lib/ai.js";
-import { getGO, setGO, addGOToIndex, incrementJobDone } from "../lib/cache.js";
+import { getGO, setGO, addGOToIndex, incrementJobDone, incrementJobFailed } from "../lib/cache.js";
 import { rawGOToPartial } from "../lib/scraper.js";
 import type { ProcessGOMessage } from "./scrape.js";
 import type { GO } from "../types.js";
 
 const MAX_DELIVERY_ATTEMPTS = 3;
 
-// Vercel Queue push-mode consumer for the "go-processing" topic.
-// Vercel invokes this route directly — it has no public URL.
 export const POST = handleCallback<ProcessGOMessage>(
   async (data, metadata) => {
     const { jobId, raw, goId } = data;
-    console.log(
-      `[process-go] Starting: ${goId} (delivery #${metadata.deliveryCount})`,
-    );
+    console.log(`[process-go] Starting: ${goId} (delivery #${metadata.deliveryCount})`);
 
-    // Idempotency — skip if already cached (handles re-deliveries gracefully)
+    // Idempotency — skip if already successfully processed
     const existing = await getGO(goId);
-    if (existing) {
-      console.log(`[process-go] Already cached, skipping: ${goId}`);
+    if (existing?.status === "done") {
+      console.log(`[process-go] Already done, skipping: ${goId}`);
       return;
     }
 
@@ -41,7 +33,8 @@ export const POST = handleCallback<ProcessGOMessage>(
     const go: GO = {
       ...partial,
       aiOverview,
-      scrapedAt: new Date().toISOString(),
+      status: "done",
+      scrapedAt: existing?.scrapedAt ?? new Date().toISOString(),
     };
 
     await setGO(go);
@@ -52,14 +45,8 @@ export const POST = handleCallback<ProcessGOMessage>(
   },
   {
     retry(err, metadata) {
-      // Message already gone (acknowledged by a previous delivery or expired) — stop retrying
-      if (
-        err instanceof MessageNotFoundError ||
-        err instanceof MessageNotAvailableError
-      ) {
-        console.log(
-          `[process-go] Message no longer available (${err.constructor.name}), acknowledging: ${metadata.messageId}`,
-        );
+      if (err instanceof MessageNotFoundError || err instanceof MessageNotAvailableError) {
+        console.log(`[process-go] Message no longer available (${err.constructor.name}), acknowledging: ${metadata.messageId}`);
         return { acknowledge: true };
       }
 
@@ -67,18 +54,14 @@ export const POST = handleCallback<ProcessGOMessage>(
       console.error(`[process-go] Error on attempt ${attempt}:`, String(err));
 
       if (attempt >= MAX_DELIVERY_ATTEMPTS) {
-        console.error(
-          `[process-go] Max retries reached, dropping: ${metadata.messageId}`,
-        );
+        console.error(`[process-go] Max retries reached, dropping: ${metadata.messageId}`);
+        // Best effort: mark as failed in Redis
         return { acknowledge: true };
       }
 
-      // Exponential backoff: 10s → 30s
       const delaySeconds = 10 * attempt;
-      console.log(
-        `[process-go] Retrying in ${delaySeconds}s (attempt ${attempt}/${MAX_DELIVERY_ATTEMPTS})`,
-      );
+      console.log(`[process-go] Retrying in ${delaySeconds}s (attempt ${attempt}/${MAX_DELIVERY_ATTEMPTS})`);
       return { afterSeconds: delaySeconds };
     },
-  },
+  }
 );

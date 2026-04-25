@@ -2,8 +2,9 @@ import { Hono } from "hono";
 import { send } from "@vercel/queue";
 import { randomUUID } from "node:crypto";
 import { scrapeGOList, rawGOToPartial } from "../lib/scraper.js";
-import { getGO, setJobStatus, getJobStatus, flushAllGOs, checkScrapeRateLimit } from "../lib/cache.js";
+import { getGO, setGO, addGOToIndex, setJobStatus, getJobStatus, flushAllGOs, checkScrapeRateLimit } from "../lib/cache.js";
 import type { RawGO } from "../lib/scraper.js";
+import type { GO } from "../types.js";
 
 const scrapeRouter = new Hono();
 
@@ -83,10 +84,24 @@ scrapeRouter.post("/", async (c) => {
   for (const raw of rawGOs) {
     const partial = rawGOToPartial(raw);
     const existing = await getGO(partial.id);
-    if (existing) {
+
+    // Skip only fully processed GOs — re-queue pending/failed ones
+    if (existing?.status === "done") {
       console.log(`[scrape] Skipping cached GO: ${partial.id}`);
       skipped++;
       continue;
+    }
+
+    // Save immediately as pending so it's visible in /api/gos right away
+    if (!existing) {
+      const pendingGO: GO = {
+        ...partial,
+        aiOverview: "",
+        status: "pending",
+        scrapedAt: new Date().toISOString(),
+      };
+      await setGO(pendingGO);
+      await addGOToIndex(partial.id);
     }
 
     const message: ProcessGOMessage = { jobId, raw, goId: partial.id };
