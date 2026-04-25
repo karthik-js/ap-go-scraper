@@ -84,13 +84,42 @@ export async function flushAllGOs(): Promise<number> {
   if (ids.length === 0) return 0;
 
   const keys = ids.map(goKey);
-  // Delete all GO keys + the index in one pipeline
   const pipeline = getRedis().pipeline();
   keys.forEach((k) => pipeline.del(k));
   pipeline.del(INDEX_KEY);
   await pipeline.exec();
 
   return ids.length;
+}
+
+// ── Rate limiting ─────────────────────────────────────────────────────────────
+
+const RATE_LIMIT_KEY = "scrape:rate-limit";
+const RATE_LIMIT_MAX = 3;
+const RATE_LIMIT_WINDOW_SEC = 60 * 60 * 24; // 24 hours
+
+/** Returns { allowed, remaining, resetInSeconds } */
+export async function checkScrapeRateLimit(): Promise<{
+  allowed: boolean;
+  remaining: number;
+  resetInSeconds: number;
+}> {
+  const redis = getRedis();
+  const count = await redis.incr(RATE_LIMIT_KEY);
+
+  if (count === 1) {
+    // First call in the window — set TTL
+    await redis.expire(RATE_LIMIT_KEY, RATE_LIMIT_WINDOW_SEC);
+  }
+
+  const ttl = await redis.ttl(RATE_LIMIT_KEY);
+  const remaining = Math.max(0, RATE_LIMIT_MAX - count);
+
+  return {
+    allowed: count <= RATE_LIMIT_MAX,
+    remaining,
+    resetInSeconds: ttl > 0 ? ttl : RATE_LIMIT_WINDOW_SEC,
+  };
 }
 
 export async function getAllGOs(): Promise<GO[]> {

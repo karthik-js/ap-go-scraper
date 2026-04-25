@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { send } from "@vercel/queue";
 import { randomUUID } from "node:crypto";
 import { scrapeGOList, rawGOToPartial } from "../lib/scraper.js";
-import { getGO, setJobStatus, getJobStatus, flushAllGOs } from "../lib/cache.js";
+import { getGO, setJobStatus, getJobStatus, flushAllGOs, checkScrapeRateLimit } from "../lib/cache.js";
 import type { RawGO } from "../lib/scraper.js";
 
 const scrapeRouter = new Hono();
@@ -13,8 +13,54 @@ export interface ProcessGOMessage {
   goId: string;
 }
 
+// ── Middleware: API key auth ───────────────────────────────────────────────────
+scrapeRouter.use("/", async (c, next) => {
+  const apiKey = process.env.SCRAPE_API_KEY;
+  if (!apiKey) {
+    console.error("[auth] SCRAPE_API_KEY env var not set");
+    return c.json({ error: "Server misconfiguration" }, 500);
+  }
+
+  const authHeader = c.req.header("Authorization") ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+  if (token !== apiKey) {
+    console.warn("[auth] Unauthorized scrape attempt");
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  await next();
+});
+
+scrapeRouter.use("/flush", async (c, next) => {
+  const apiKey = process.env.SCRAPE_API_KEY;
+  if (!apiKey) return c.json({ error: "Server misconfiguration" }, 500);
+
+  const authHeader = c.req.header("Authorization") ?? "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+  if (token !== apiKey) {
+    console.warn("[auth] Unauthorized flush attempt");
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+
+  await next();
+});
+
 // POST /api/scrape — scrapes GO list, queues each new GO for enrichment
 scrapeRouter.post("/", async (c) => {
+  const rateLimit = await checkScrapeRateLimit();
+  if (!rateLimit.allowed) {
+    console.warn(`[scrape] Rate limit exceeded. Resets in ${rateLimit.resetInSeconds}s`);
+    return c.json(
+      {
+        error: "Rate limit exceeded. Max 3 scrapes per 24 hours.",
+        resetInSeconds: rateLimit.resetInSeconds,
+      },
+      429,
+    );
+  }
+  console.log(`[scrape] Rate limit OK — ${rateLimit.remaining} remaining in window`);
   console.log("[scrape] Starting GO list scrape...");
   let rawGOs: RawGO[];
   try {
