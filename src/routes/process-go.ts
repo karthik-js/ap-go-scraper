@@ -1,7 +1,11 @@
-import { handleCallback } from "@vercel/queue";
+import {
+  handleCallback,
+  MessageNotFoundError,
+  MessageNotAvailableError,
+} from "@vercel/queue";
 import { extractPDFText } from "../lib/pdf.js";
 import { generateGOOverview } from "../lib/ai.js";
-import { getGO, setGO, addGOToIndex, incrementJobDone, incrementJobFailed } from "../lib/cache.js";
+import { getGO, setGO, addGOToIndex, incrementJobDone } from "../lib/cache.js";
 import { rawGOToPartial } from "../lib/scraper.js";
 import type { ProcessGOMessage } from "./scrape.js";
 import type { GO } from "../types.js";
@@ -10,19 +14,20 @@ const MAX_DELIVERY_ATTEMPTS = 3;
 
 // Vercel Queue push-mode consumer for the "go-processing" topic.
 // Vercel invokes this route directly — it has no public URL.
-export const POST = handleCallback<ProcessGOMessage>(async (data, metadata) => {
-  const { jobId, raw, goId } = data;
-  console.log(`[process-go] Starting: ${goId} (delivery #${metadata.deliveryCount}/${MAX_DELIVERY_ATTEMPTS})`);
+export const POST = handleCallback<ProcessGOMessage>(
+  async (data, metadata) => {
+    const { jobId, raw, goId } = data;
+    console.log(
+      `[process-go] Starting: ${goId} (delivery #${metadata.deliveryCount})`,
+    );
 
-  // Idempotency check — Vercel re-delivers if visibility timeout expires mid-processing.
-  // If already cached, acknowledge and skip cleanly.
-  const existing = await getGO(goId);
-  if (existing) {
-    console.log(`[process-go] Already cached, skipping: ${goId}`);
-    return;
-  }
+    // Idempotency — skip if already cached (handles re-deliveries gracefully)
+    const existing = await getGO(goId);
+    if (existing) {
+      console.log(`[process-go] Already cached, skipping: ${goId}`);
+      return;
+    }
 
-  try {
     const partial = rawGOToPartial(raw);
 
     console.log(`[process-go] Fetching PDF: ${raw.pdfUrl}`);
@@ -44,15 +49,36 @@ export const POST = handleCallback<ProcessGOMessage>(async (data, metadata) => {
     await incrementJobDone(jobId);
 
     console.log(`[process-go] ✓ Cached: ${goId}`);
-  } catch (err) {
-    console.error(`[process-go] ✗ Failed: ${goId}`, err);
-    await incrementJobFailed(jobId, `${goId}: ${String(err)}`);
+  },
+  {
+    retry(err, metadata) {
+      // Message already gone (acknowledged by a previous delivery or expired) — stop retrying
+      if (
+        err instanceof MessageNotFoundError ||
+        err instanceof MessageNotAvailableError
+      ) {
+        console.log(
+          `[process-go] Message no longer available (${err.constructor.name}), acknowledging: ${metadata.messageId}`,
+        );
+        return { acknowledge: true };
+      }
 
-    if (metadata.deliveryCount < MAX_DELIVERY_ATTEMPTS) {
-      console.log(`[process-go] Retrying ${goId} (attempt ${metadata.deliveryCount}/${MAX_DELIVERY_ATTEMPTS})`);
-      throw err;
-    }
+      const attempt = metadata.deliveryCount;
+      console.error(`[process-go] Error on attempt ${attempt}:`, String(err));
 
-    console.error(`[process-go] Dropping ${goId} after ${MAX_DELIVERY_ATTEMPTS} failed attempts`);
-  }
-});
+      if (attempt >= MAX_DELIVERY_ATTEMPTS) {
+        console.error(
+          `[process-go] Max retries reached, dropping: ${metadata.messageId}`,
+        );
+        return { acknowledge: true };
+      }
+
+      // Exponential backoff: 10s → 30s
+      const delaySeconds = 10 * attempt;
+      console.log(
+        `[process-go] Retrying in ${delaySeconds}s (attempt ${attempt}/${MAX_DELIVERY_ATTEMPTS})`,
+      );
+      return { afterSeconds: delaySeconds };
+    },
+  },
+);
