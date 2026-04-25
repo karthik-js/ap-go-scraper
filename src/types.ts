@@ -1,6 +1,5 @@
 export interface GO {
-  id: string;          // unique slug: e.g. "finance-dept-2024-ms42"
-  department: string;
+  id: string;          // unique slug: e.g. "2024-go-ms42"
   year: string;
   title: string;
   description: string;

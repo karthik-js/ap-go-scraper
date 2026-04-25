@@ -3,16 +3,11 @@ import { getAllGOs, getGO } from "../lib/cache.js";
 
 const gosRouter = new Hono();
 
-// GET /api/gos?department=finance&year=2024
+// GET /api/gos?year=2024
 gosRouter.get("/", async (c) => {
-  const departmentFilter = c.req.query("department")?.toLowerCase();
   const yearFilter = c.req.query("year");
 
   let gos = await getAllGOs();
-
-  if (departmentFilter) {
-    gos = gos.filter((go) => go.department.toLowerCase().includes(departmentFilter));
-  }
 
   if (yearFilter) {
     gos = gos.filter((go) => go.year === yearFilter);

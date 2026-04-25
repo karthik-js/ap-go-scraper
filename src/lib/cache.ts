@@ -79,6 +79,20 @@ export async function addGOToIndex(id: string): Promise<void> {
   }
 }
 
+export async function flushAllGOs(): Promise<number> {
+  const ids = await getAllGOIds();
+  if (ids.length === 0) return 0;
+
+  const keys = ids.map(goKey);
+  // Delete all GO keys + the index in one pipeline
+  const pipeline = getRedis().pipeline();
+  keys.forEach((k) => pipeline.del(k));
+  pipeline.del(INDEX_KEY);
+  await pipeline.exec();
+
+  return ids.length;
+}
+
 export async function getAllGOs(): Promise<GO[]> {
   const ids = await getAllGOIds();
   if (ids.length === 0) return [];

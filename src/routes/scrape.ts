@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { send } from "@vercel/queue";
 import { randomUUID } from "node:crypto";
 import { scrapeGOList, rawGOToPartial } from "../lib/scraper.js";
-import { getGO, setJobStatus, getJobStatus } from "../lib/cache.js";
+import { getGO, setJobStatus, getJobStatus, flushAllGOs } from "../lib/cache.js";
 import type { RawGO } from "../lib/scraper.js";
 
 const scrapeRouter = new Hono();
@@ -81,6 +81,13 @@ scrapeRouter.get("/status/:jobId", async (c) => {
   }
   const pending = status.total - status.done - status.failed;
   return c.json({ ...status, pending, complete: pending === 0 });
+});
+
+// DELETE /api/scrape/flush — clears all cached GOs so next scrape reprocesses everything
+scrapeRouter.delete("/flush", async (c) => {
+  const count = await flushAllGOs();
+  console.log(`[scrape] Flushed ${count} GOs from cache`);
+  return c.json({ message: `Flushed ${count} GOs from cache. Run POST /api/scrape to re-scrape.`, flushed: count });
 });
 
 export default scrapeRouter;

@@ -12,8 +12,8 @@ function slugify(text: string): string {
     .slice(0, 60);
 }
 
-function buildGOId(department: string, year: string, title: string): string {
-  return `${slugify(department)}-${slugify(year)}-${slugify(title)}`.slice(0, 100);
+function buildGOId(year: string, title: string): string {
+  return `${slugify(year)}-${slugify(title)}`.slice(0, 100);
 }
 
 async function getBrowser() {
@@ -36,7 +36,6 @@ async function getBrowser() {
 }
 
 export interface RawGO {
-  department: string;
   year: string;
   title: string;
   description: string;
@@ -51,115 +50,39 @@ export async function scrapeGOList(): Promise<RawGO[]> {
   try {
     console.log(`[scraper] Navigating to: ${GO_LIST_URL}`);
     await page.goto(GO_LIST_URL, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.waitForTimeout(4000);
 
-    // Give JS-rendered content time to hydrate
-    await page.waitForTimeout(5000);
-
-    // Log page title + URL to confirm we landed correctly
     const title = await page.title();
-    const url = page.url();
-    console.log(`[scraper] Page title: "${title}" | URL: ${url}`);
+    console.log(`[scraper] Page title: "${title}"`);
 
-    // Log all unique tag names and classes to understand DOM structure
-    const domSummary = await page.evaluate(() => {
-      const allLinks = Array.from(document.querySelectorAll("a[href]"))
-        .map((a) => (a as HTMLAnchorElement).href)
-        .filter((h) => h.includes(".pdf") || h.includes("upload"))
-        .slice(0, 5);
+    const gos = await page.evaluate(() => {
+      const BASE = "https://cag.gov.in";
+      const results: Array<{
+        year: string;
+        title: string;
+        description: string;
+        pdfUrl: string;
+      }> = [];
 
-      const bodySnippet = document.body.innerText.slice(0, 500).replace(/\s+/g, " ");
+      // Each year is an h1.accTrigger, followed by .accordDetail with <ul><li><a>
+      const accordions = document.querySelectorAll(".accordion.guidelinesList");
+      accordions.forEach((accordion) => {
+        const yearEl = accordion.querySelector("h1.accTrigger");
+        const year = yearEl?.textContent?.trim() ?? "Unknown";
 
-      const classNames = Array.from(
-        new Set(
-          Array.from(document.querySelectorAll("[class]"))
-            .map((el) => el.className)
-            .filter(Boolean)
-            .flatMap((c) => c.split(" "))
-            .filter((c) => c.length > 3)
-        )
-      ).slice(0, 30);
+        accordion.querySelectorAll(".accordDetail a[href]").forEach((el) => {
+          const a = el as HTMLAnchorElement;
+          const linkTitle = a.textContent?.trim() ?? "";
+          const href = a.getAttribute("href") ?? "";
+          if (!href || !linkTitle) return;
 
-      return { allLinks, bodySnippet, classNames };
-    });
-
-    console.log("[scraper] PDF links found:", domSummary.allLinks);
-    console.log("[scraper] CSS classes:", domSummary.classNames.join(", "));
-    console.log("[scraper] Body text:", domSummary.bodySnippet);
-
-    const gos: RawGO[] = [];
-    let hasNextPage = true;
-    let pageNum = 1;
-
-    while (hasNextPage) {
-      console.log(`[scraper] Scraping page ${pageNum}...`);
-      const pageGOs = await page.evaluate(() => {
-        const rows: Array<{
-          department: string;
-          year: string;
-          title: string;
-          description: string;
-          pdfUrl: string;
-        }> = [];
-
-        // Try table rows first
-        const tableRows = document.querySelectorAll("table tbody tr");
-        if (tableRows.length > 0) {
-          tableRows.forEach((row) => {
-            const cells = row.querySelectorAll("td");
-            if (cells.length < 2) return;
-
-            const linkEl = row.querySelector("a[href$='.pdf'], a[href*='/uploads/'], a[href*='upload']");
-            const pdfUrl = linkEl ? (linkEl as HTMLAnchorElement).href : "";
-            if (!pdfUrl) return;
-
-            rows.push({
-              department: cells[0]?.textContent?.trim() ?? "",
-              year: cells[1]?.textContent?.trim() ?? "",
-              title: cells[2]?.textContent?.trim() ?? cells[1]?.textContent?.trim() ?? "",
-              description: cells[3]?.textContent?.trim() ?? "",
-              pdfUrl,
-            });
-          });
-        }
-
-        // Fallback: any element containing a PDF link
-        if (rows.length === 0) {
-          const allPdfLinks = Array.from(
-            document.querySelectorAll("a[href$='.pdf'], a[href*='upload']")
-          ) as HTMLAnchorElement[];
-
-          allPdfLinks.forEach((linkEl) => {
-            const container = linkEl.closest("tr, li, .views-row, .view-row, article, .item, [class*='row']") ?? linkEl.parentElement;
-            if (!container) return;
-            const texts = Array.from(container.querySelectorAll("td, span, p, div"))
-              .map((el) => el.textContent?.trim())
-              .filter((t): t is string => Boolean(t) && t.length > 1);
-
-            rows.push({
-              department: texts[0] ?? "",
-              year: texts[1] ?? "",
-              title: texts[2] ?? linkEl.textContent?.trim() ?? "",
-              description: texts[3] ?? "",
-              pdfUrl: linkEl.href,
-            });
-          });
-        }
-
-        return rows;
+          const pdfUrl = href.startsWith("http") ? href : `${BASE}${href}`;
+          results.push({ year, title: linkTitle, description: linkTitle, pdfUrl });
+        });
       });
 
-      gos.push(...pageGOs);
-      console.log(`[scraper] Page ${pageNum}: found ${pageGOs.length} GOs (total: ${gos.length})`);
-
-      const nextLink = await page.$("a.next, a[title='Go to next page'], li.next a, .pager-next a");
-      if (nextLink) {
-        pageNum++;
-        await nextLink.click();
-        await page.waitForLoadState("networkidle");
-      } else {
-        hasNextPage = false;
-      }
-    }
+      return results;
+    });
 
     console.log(`[scraper] Done. Total GOs scraped: ${gos.length}`);
     return gos;
@@ -170,6 +93,6 @@ export async function scrapeGOList(): Promise<RawGO[]> {
 }
 
 export function rawGOToPartial(raw: RawGO): Omit<GO, "aiOverview" | "scrapedAt"> {
-  const id = buildGOId(raw.department, raw.year, raw.title);
+  const id = buildGOId(raw.year, raw.title);
   return { id, ...raw };
 }

@@ -32,3 +32,4 @@ if (!process.env.VERCEL) {
 
 // Vercel serverless handler
 export default handle(app);
+export const DELETE = handle(app);
