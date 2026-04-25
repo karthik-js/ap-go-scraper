@@ -19,9 +19,6 @@ const AI_TIMEOUT_MS = 120_000; // 2 minutes
 export async function generateGOOverview(pdfText: string): Promise<string> {
   const truncated = pdfText.slice(0, MAX_PDF_CHARS);
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
-
   try {
     const completion = await client.chat.completions.create(
       {
@@ -31,12 +28,10 @@ export async function generateGOOverview(pdfText: string): Promise<string> {
         max_tokens: 256,
         stream: false,
       },
-      { signal: controller.signal },
+      { signal: AbortSignal.timeout(AI_TIMEOUT_MS) },
     );
     return (completion.choices[0]?.message?.content ?? "").trim();
   } catch (err) {
     throw new Error(`AI overview generation failed: ${err}`);
-  } finally {
-    clearTimeout(timer);
   }
 }
