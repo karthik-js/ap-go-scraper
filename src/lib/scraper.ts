@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { chromium } from "playwright-core";
 import type { GO } from "../types.js";
 
@@ -8,12 +9,12 @@ function slugify(text: string): string {
   return text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 60);
+    .replace(/^-|-$/g, "");
 }
 
-function buildGOId(year: string, title: string): string {
-  return `${slugify(year)}-${slugify(title)}`.slice(0, 100);
+function buildGOId(year: string, title: string, pdfUrl: string): string {
+  const hash = createHash("sha1").update(pdfUrl).digest("hex").slice(0, 8);
+  return `${year}-${slugify(title)}-${hash}`;
 }
 
 async function getBrowser() {
@@ -93,6 +94,6 @@ export async function scrapeGOList(): Promise<RawGO[]> {
 }
 
 export function rawGOToPartial(raw: RawGO): Omit<GO, "aiOverview" | "scrapedAt" | "status"> {
-  const id = buildGOId(raw.year, raw.title);
+  const id = buildGOId(raw.year, raw.title, raw.pdfUrl);
   return { id, ...raw };
 }
