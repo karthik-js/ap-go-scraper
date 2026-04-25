@@ -1,7 +1,7 @@
 import { handleCallback } from "@vercel/queue";
 import { extractPDFText } from "../lib/pdf.js";
 import { generateGOOverview } from "../lib/ai.js";
-import { setGO, addGOToIndex, incrementJobDone, incrementJobFailed } from "../lib/cache.js";
+import { getGO, setGO, addGOToIndex, incrementJobDone, incrementJobFailed } from "../lib/cache.js";
 import { rawGOToPartial } from "../lib/scraper.js";
 import type { ProcessGOMessage } from "./scrape.js";
 import type { GO } from "../types.js";
@@ -13,6 +13,14 @@ const MAX_DELIVERY_ATTEMPTS = 3;
 export const POST = handleCallback<ProcessGOMessage>(async (data, metadata) => {
   const { jobId, raw, goId } = data;
   console.log(`[process-go] Starting: ${goId} (delivery #${metadata.deliveryCount}/${MAX_DELIVERY_ATTEMPTS})`);
+
+  // Idempotency check — Vercel re-delivers if visibility timeout expires mid-processing.
+  // If already cached, acknowledge and skip cleanly.
+  const existing = await getGO(goId);
+  if (existing) {
+    console.log(`[process-go] Already cached, skipping: ${goId}`);
+    return;
+  }
 
   try {
     const partial = rawGOToPartial(raw);
@@ -42,10 +50,9 @@ export const POST = handleCallback<ProcessGOMessage>(async (data, metadata) => {
 
     if (metadata.deliveryCount < MAX_DELIVERY_ATTEMPTS) {
       console.log(`[process-go] Retrying ${goId} (attempt ${metadata.deliveryCount}/${MAX_DELIVERY_ATTEMPTS})`);
-      throw err; // re-throw to trigger Vercel Queue retry
+      throw err;
     }
 
-    // Max attempts reached — log and drop the message (don't re-throw)
     console.error(`[process-go] Dropping ${goId} after ${MAX_DELIVERY_ATTEMPTS} failed attempts`);
   }
 });
