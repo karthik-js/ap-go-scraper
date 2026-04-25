@@ -18,7 +18,7 @@
     "@sparticuz/chromium": "^133.0.0",
     "@upstash/redis": "^1.37.0",
     "@vercel/queue": "^0.1.6",
-    "ai": "^4.3.15",
+    "ai": "^5.0.52",
     "hono": "^4.7.7",
     "playwright-core": "^1.51.1",
     "unpdf": "^0.12.0"
