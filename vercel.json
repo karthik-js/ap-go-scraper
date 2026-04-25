@@ -6,12 +6,10 @@
   "outputDirectory": ".",
   "functions": {
     "api/index.ts": {
-      "maxDuration": 60,
-      "memory": 1024
+      "maxDuration": 60
     },
     "api/process-go.ts": {
       "maxDuration": 30,
-      "memory": 512,
       "experimentalTriggers": [
         { "type": "queue/v2beta", "topic": "go-processing" }
       ]
