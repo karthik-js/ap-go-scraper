@@ -16,7 +16,6 @@
     }
   },
   "rewrites": [
-    { "source": "/api/process-go", "destination": "/api/process-go" },
     { "source": "/api/(.*)", "destination": "/api/index" }
   ]
 }
