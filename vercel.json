@@ -16,6 +16,7 @@
     }
   },
   "rewrites": [
+    { "source": "/openapi.yaml", "destination": "/api/index" },
     { "source": "/api/(.*)", "destination": "/api/index" }
   ]
 }

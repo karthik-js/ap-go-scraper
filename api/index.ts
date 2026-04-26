@@ -3,9 +3,13 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 import { serve } from "@hono/node-server";
 import { handle } from "@hono/node-server/vercel";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import scrapeRouter from "../src/routes/scrape.js";
 import gosRouter from "../src/routes/gos.js";
 import chatRouter from "../src/routes/chat.js";
+
+const openApiSpec = readFileSync(join(__dirname, "../openapi.yaml"), "utf-8");
 
 const app = new Hono();
 
@@ -13,6 +17,10 @@ app.use("*", logger());
 app.use("*", cors());
 
 app.get("/", (c) => c.json({ service: "AP GO Scraper", status: "ok" }));
+
+app.get("/openapi.yaml", (c) =>
+  c.text(openApiSpec, 200, { "Content-Type": "text/yaml" })
+);
 
 app.route("/api/scrape", scrapeRouter);
 app.route("/api/gos", gosRouter);

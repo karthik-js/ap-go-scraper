@@ -1,0 +1,291 @@
+openapi: 3.0.3
+info:
+  title: AP GO Scraper API
+  description: API for scraping and querying Andhra Pradesh Government Orders (GOs)
+  version: 1.0.0
+
+servers:
+  - url: https://ap-go-scraper.vercel.app
+    description: Production
+  - url: http://localhost:3000
+    description: Local development
+
+paths:
+  /:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        "200":
+          description: Service is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service:
+                    type: string
+                    example: AP GO Scraper
+                  status:
+                    type: string
+                    example: ok
+
+  /api/scrape:
+    post:
+      summary: Trigger GO list scrape
+      description: Scrapes the AP GO list page and queues new GOs for enrichment. Rate limited to 3 scrapes per 24 hours.
+      operationId: triggerScrape
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Scrape initiated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                    format: uuid
+                  message:
+                    type: string
+                  queued:
+                    type: integer
+                  skipped:
+                    type: integer
+                  statusUrl:
+                    type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          description: Rate limit exceeded (max 3 scrapes per 24 hours)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RateLimitError"
+        "500":
+          $ref: "#/components/responses/ServerError"
+
+  /api/scrape/status/{jobId}:
+    get:
+      summary: Get scrape job status
+      operationId: getScrapeStatus
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStatus"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/scrape/flush:
+    delete:
+      summary: Flush all cached GOs
+      description: Clears all cached GOs so the next scrape reprocesses everything.
+      operationId: flushGOs
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Cache flushed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  flushed:
+                    type: integer
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/gos:
+    get:
+      summary: List all Government Orders
+      operationId: listGOs
+      parameters:
+        - name: year
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "2024"
+          description: Filter GOs by year
+      responses:
+        "200":
+          description: List of GOs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  gos:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GO"
+
+  /api/gos/{id}:
+    get:
+      summary: Get a specific Government Order
+      operationId: getGO
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: "2024-go-ms42"
+      responses:
+        "200":
+          description: Government Order details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GO"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/chat:
+    post:
+      summary: Ask a question about a Government Order
+      description: Streams an AI-generated answer about a specific GO. Rate limited to 20 questions per hour per IP.
+      operationId: chatWithGO
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [goId, question]
+              properties:
+                goId:
+                  type: string
+                  example: "2024-go-ms42"
+                question:
+                  type: string
+                  example: "What is the main subject of this GO?"
+      responses:
+        "200":
+          description: Streamed AI response text
+          content:
+            text/plain:
+              schema:
+                type: string
+        "400":
+          description: Missing or invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          description: Rate limit exceeded (max 20 questions per hour)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RateLimitError"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    GO:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "2024-go-ms42"
+        year:
+          type: string
+          example: "2024"
+        title:
+          type: string
+        description:
+          type: string
+        pdfUrl:
+          type: string
+          format: uri
+        aiOverview:
+          type: string
+          description: 2-3 sentence AI-generated summary from the PDF
+        status:
+          type: string
+          enum: [pending, done, failed]
+        scrapedAt:
+          type: string
+          format: date-time
+
+    JobStatus:
+      type: object
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        total:
+          type: integer
+        done:
+          type: integer
+        failed:
+          type: integer
+        pending:
+          type: integer
+        complete:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+        startedAt:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+    RateLimitError:
+      type: object
+      properties:
+        error:
+          type: string
+        resetInSeconds:
+          type: integer
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
