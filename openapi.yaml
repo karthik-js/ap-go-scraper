@@ -122,6 +122,21 @@ paths:
             type: string
             example: "2024"
           description: Filter GOs by year
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            example: "ms42"
+          description: Search GOs by GO number or name (case-insensitive, matches against id and title)
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+          description: Sort order by year (desc by default)
       responses:
         "200":
           description: List of GOs

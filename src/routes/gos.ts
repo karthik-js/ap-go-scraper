@@ -3,9 +3,11 @@ import { getAllGOs, getGO } from "../lib/cache.js";
 
 const gosRouter = new Hono();
 
-// GET /api/gos?year=2024
+// GET /api/gos?year=2024&search=ms42&sort=asc
 gosRouter.get("/", async (c) => {
   const yearFilter = c.req.query("year");
+  const search = c.req.query("search")?.toLowerCase();
+  const sort = c.req.query("sort") === "asc" ? "asc" : "desc";
 
   let gos = await getAllGOs();
 
@@ -13,7 +15,19 @@ gosRouter.get("/", async (c) => {
     gos = gos.filter((go) => go.year === yearFilter);
   }
 
-  gos.sort((a, b) => Number(b.year) - Number(a.year));
+  if (search) {
+    gos = gos.filter(
+      (go) =>
+        go.id.toLowerCase().includes(search) ||
+        go.title.toLowerCase().includes(search),
+    );
+  }
+
+  gos.sort((a, b) =>
+    sort === "asc"
+      ? Number(a.year) - Number(b.year)
+      : Number(b.year) - Number(a.year),
+  );
 
   return c.json({ total: gos.length, gos });
 });
