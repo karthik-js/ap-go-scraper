@@ -29,6 +29,7 @@ gosRouter.get("/", async (c) => {
       : Number(b.year) - Number(a.year),
   );
 
+  c.header("Cache-Control", "s-maxage=3600, stale-while-revalidate=600");
   return c.json({ total: gos.length, gos });
 });
 
@@ -41,6 +42,7 @@ gosRouter.get("/:id", async (c) => {
     return c.json({ error: "GO not found" }, 404);
   }
 
+  c.header("Cache-Control", "s-maxage=86400, stale-while-revalidate=3600");
   return c.json(go);
 });
 
