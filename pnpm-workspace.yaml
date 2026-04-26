@@ -1,2 +1,4 @@
+minimumReleaseAge: 1440
+
 overrides:
   tar: ">=7.5.11"
