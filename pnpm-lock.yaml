@@ -13,7 +13,7 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: ^1.13.7
-        version: 1.19.14(hono@4.12.15)
+        version: 1.19.14(hono@4.12.18)
       '@sparticuz/chromium':
         specifier: ^133.0.0
         version: 133.0.0
@@ -24,8 +24,8 @@ importers:
         specifier: ^0.1.6
         version: 0.1.6
       hono:
-        specifier: ^4.7.7
-        version: 4.12.15
+        specifier: ^4.12.18
+        version: 4.12.18
       openai:
         specifier: ^6.34.0
         version: 6.34.0(zod@3.25.76)
@@ -405,8 +405,8 @@ packages:
   has-unicode@2.0.1:
     resolution: {integrity: sha512-8Rf9Y83NBReMnx0gFzA8JImQACstCYWUplepDa9xprwwtmgEZUF0h/i5xSA625zB/I37EtrswSST6OXxwaaIJQ==}
 
-  hono@4.12.15:
-    resolution: {integrity: sha512-qM0jDhFEaCBb4TxoW7f53Qrpv9RBiayUHo0S52JudprkhvpjIrGoU1mnnr29Fvd1U335ZFPZQY1wlkqgfGXyLg==}
+  hono@4.12.18:
+    resolution: {integrity: sha512-RWzP96k/yv0PQfyXnWjs6zot20TqfpfsNXhOnev8d1InAxubW93L11/oNUc3tQqn2G0bSdAOBpX+2uDFHV7kdQ==}
     engines: {node: '>=16.9.0'}
 
   https-proxy-agent@5.0.1:
@@ -699,9 +699,9 @@ snapshots:
   '@esbuild/win32-x64@0.27.7':
     optional: true
 
-  '@hono/node-server@1.19.14(hono@4.12.15)':
+  '@hono/node-server@1.19.14(hono@4.12.18)':
     dependencies:
-      hono: 4.12.15
+      hono: 4.12.18
 
   '@isaacs/fs-minipass@4.0.1':
     dependencies:
@@ -942,7 +942,7 @@ snapshots:
   has-unicode@2.0.1:
     optional: true
 
-  hono@4.12.15: {}
+  hono@4.12.18: {}
 
   https-proxy-agent@5.0.1:
     dependencies:
